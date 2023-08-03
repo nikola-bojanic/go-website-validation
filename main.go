@@ -3,10 +3,12 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"sync"
 )
 
 var (
 	websites []string
+	wg       sync.WaitGroup
 )
 
 func init() {
@@ -23,22 +25,24 @@ func init() {
 }
 
 func main() {
-	ch := make(chan string)
-	go checkWebsite(ch)
+	ch := make(chan string, len(websites))
+	for i := 0; i < len(websites); i++ {
+		wg.Add(1)
+		go checkWebsite(ch, websites[i])
+	}
+	wg.Wait()
+	close(ch)
 	for valid := range ch {
 		fmt.Println(valid)
 	}
-
 }
 
-func checkWebsite(ch chan string) {
-	for _, website := range websites {
-		res, err := http.Get(website)
-		if err != nil {
-			ch <- fmt.Sprintf("%v is unavailable, %v", website, err)
-		} else {
-			ch <- fmt.Sprintf("%v is available, status %v", website, res.Status)
-		}
+func checkWebsite(ch chan string, website string) {
+	defer wg.Done()
+	res, err := http.Get(website)
+	if err != nil {
+		ch <- fmt.Sprintf("%v is unavailable, %v", website, err)
+	} else {
+		ch <- fmt.Sprintf("%v is available, status %v", website, res.Status)
 	}
-	close(ch)
 }
